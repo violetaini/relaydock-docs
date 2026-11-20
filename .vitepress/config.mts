@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitepress'
 
+const base = process.env.VITEPRESS_BASE || (process.env.GITHUB_ACTIONS && !process.env.CUSTOM_DOMAIN ? '/relaydock-docs/' : '/')
+
 export default defineConfig({
+  base,
   title: 'RelayDock',
   description: 'RelayDock 使用手册：安装、Agent 接入、任意门转发、DDNS、用户授权、订阅与运维排错。',
   lang: 'zh-CN',
