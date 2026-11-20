@@ -1,103 +1,80 @@
-# 从零部署 12 步路线图
+# 快速开始：跑通第一条节点
 
-本指南采用与业界标杆（妙妙屋X）相同标准的实战步骤，指导您从一台全新的 Linux VPS 开始，在 10 分钟内完成 RelayDock 控制端主控、SSL 证书配置、Agent 节点接入与客户端分发的全流程闭环。
+目标是完成一条可以真实使用的链路：**控制端可登录 → Agent 在线 → 入站运行 → 用户获授权 → 客户端连接成功**。先完成最小闭环，再配置 DDNS、证书和多跳转发。
 
----
+[![从部署到验证的六个步骤](/images/quick-start.svg)](/images/quick-start.svg)
 
-## 路线图总览
+## 开始前准备
 
-```text
-[阶段一: 控制端准备]
-  步骤 1: 准备云服务器与独立域名
-  步骤 2: 部署 RelayDock 主控服务
-  步骤 3: 配置反向代理与 HTTPS (WebCrypto 安全上下文)
-  步骤 4: 登录管理后台并设置高强度凭据
+| 准备项 | 需要确认什么 |
+| --- | --- |
+| 控制端 Linux 主机 | AMD64 或 ARM64；有管理权限；可下载 GitHub Release |
+| 节点主机 | 可以与控制端通信；有可用的 TCP/UDP 端口 |
+| 域名 | 生产控制端建议使用独立域名和 HTTPS |
+| 云安全组与系统防火墙 | 是两层规则，均需核对；仅开放实际使用的端口 |
+| 客户端 | 使用支持所选协议和传输方式的版本 |
 
-[阶段二: DNS 与证书凭据配置]
-  步骤 5: 接入 DNS 提供商 API (华为云/Cloudflare/DNSPod)
-  步骤 6: 签发或上传泛域名 SSL 证书 (*.example.com)
+控制端和节点可以在同一台机器上，但仍是不同职责。对已有 Xray、Nginx 或其他面板的服务器，先确认端口及文件归属，避免直接接管。
 
-[阶段三: 节点接入与核心配置]
-  步骤 7: 在面板添加首台远程服务器
-  步骤 8: 目标节点执行一键安装命令启动 Agent
-  步骤 9: 配置域名与启用 DDNS 动态域名同步
-  步骤 10: 设定 Xray 核心运行模式 (内嵌核心 vs 外部接管)
+## 1. 安装并初始化控制端
 
-[阶段四: 安全伪装与分发交付]
-  步骤 11: 配置 WSS / 443 伪装反代与安全防撞墙
-  步骤 12: 创建用户与套餐，下发客户端订阅
+推荐下载脚本后运行，便于查看内容及保留报错：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/violetaini/relaydock/main/quick-install.sh -o quick-install.sh
+sudo bash quick-install.sh
 ```
 
----
+按菜单完成安装，记录安装器显示的端口、服务名和数据位置。默认面板端口为 `12889`，默认绑定全部 IPv4 接口；生产环境应通过防火墙或 `BIND_HOST` 限制直连，而不是假定它只监听本地。
 
-## 实操详解（12 步实战）
+首次访问进入初始化向导，**由你创建管理员账号**。没有可以通用套用的默认账号密码。详见[控制端安装](/docs/install/panel)。
 
-### 步骤 1：准备云服务器与独立域名
-- **服务器要求**：Debian 11+ / Ubuntu 22.04+，最低 1 核 CPU、1GB 内存、10GB 磁盘。
-- **域名准备**：准备一个属于您的主域名（如 `chitanda.net`），并将主控子域名（如 `relay.chitanda.net`）解析至主控服务器 IP。
+## 2. 配置 HTTPS
 
-### 步骤 2：部署 RelayDock 主控服务
-主控端支持一键二进制部署或 systemd 托管，默认服务监听在 `127.0.0.1:12889`。
+将 `panel.example.com` 解析到控制端，通过 Nginx 或现有网关反代。代理应保留 Host、来源协议和 WebSocket 升级头。完成后统一使用 HTTPS 域名登录。
 
-### 步骤 3：配置反向代理与 HTTPS
-由于现代浏览器对于敏感 API（如 WebCrypto 加密通道、剪贴板等）强制要求处于安全上下文环境（HTTPS），强烈建议使用 Nginx 前置反代：
+HTTPS 有助于保护登录和订阅信息，也是剪贴板、Passkey 等浏览器能力正常工作的基础。完整配置见 [HTTPS 与反向代理](/docs/install/https)。
 
-```nginx
-server {
-    listen 80;
-    listen 443 ssl http2;
-    server_name relay.chitanda.net;
+## 3. 添加第一台服务器
 
-    ssl_certificate /etc/letsencrypt/live/relay.chitanda.net/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/relay.chitanda.net/privkey.pem;
+在 **服务管理** 中添加服务器。建议首次选择 WebSocket 连接模式：Agent 主动连接控制端，适合节点没有方便开放管理端口的场景。
 
-    location / {
-        proxy_pass http://127.0.0.1:12889;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+填写易识别的名称，核对连接模式、地址和端口，保存后打开面板生成的接入命令。不同版本及模式生成的参数不同，应使用本实例命令，勿照抄他人的令牌。
 
-### 步骤 4：登录管理后台并设置安全认证
-浏览器访问 `https://relay.chitanda.net`，首次登录输入默认凭据，并在「账号设置」中绑定 Google Authenticator 双因素认证（2FA）。
+详见 [Agent 部署](/docs/servers/agent-deploy)与[连接模式](/docs/servers/connection-modes)。
 
-### 步骤 5：接入 DNS 提供商 API
-进入「**证书与 DNS 管理**」->「**DNS 提供商**」：
-- **华为云 DNS**：输入 `Access Key ID` 与 `Secret Access Key`。
-- **Cloudflare**：输入拥有 DNS Edit 权限的 `API Token`。
-- **DNSPod**：输入腾讯云 `SecretId` 与 `SecretKey`。
-点击测试连通性，确保 API 状态标绿。
+## 4. 安装 Agent，确认在线
 
-### 步骤 6：签发或上传泛域名证书
-- 点击「**申请证书**」，选择刚才配置的 DNS 服务商，输入 `*.chitanda.net` 与 `chitanda.net`，系统将通过 DNS-01 自动完成挑战并签发证书。
-- 如已有 PEM/KEY 证书，可选择手动上传，并在「关联 DNS 提供商」下拉中选中对应服务商以供后续 DDNS 自动复用。
+在**节点服务器**执行接入命令。回到服务管理，检查：
 
-### 步骤 7：在面板添加服务器
-进入「**服务器管理**」-> 点击「**添加服务器**」：
-- 输入服务器名称（例如 `Oracle SJC`）。
-- 保持默认的「**极简接入模式**」与「**WebSocket 模式**」。
+- 在线状态及最近心跳已经更新；
+- 上报的公网地址、主机信息符合预期；
+- Agent 版本可读取，核心模式与现有环境一致。
 
-### 步骤 8：在节点执行一键安装命令
-复制生成的 `curl -fsSL https://... | sudo bash` 命令，在节点终端回车执行。10 秒内服务自动注册上线，卡片右上角显示绿色的「在线」图标。
+“Agent 在线”只代表控制通道建立，不等于代理端口已经可用。还需要下一步创建入站。
 
-### 步骤 9：配置节点域名与启用 DDNS
-在编辑服务器中选择「**启用本面板 DDNS 服务的域名**」：
-- 点击下方快捷证书 Chips 标签（如 `*.chitanda.net`），自动拼接为子域名 `sjc.chitanda.net`。
-- DDNS 提供商保持「**根据域名自动匹配**」，下方即时亮起绿色成功徽章。
+## 5. 创建入站和节点
 
-### 步骤 10：确认 Xray 核心运行模式
-- 默认为 **全托管内嵌核心 (Embedded)**，Xray 代码直接编译在 Agent 内，单进程运行，免系统服务冲突。
+在对应服务器的操作界面创建受管入站，选择客户端支持的协议组合，设置可用端口。保存后检查远端核心是否接受配置、节点管理是否出现对应条目。
 
-### 步骤 11：配置 WSS 前置伪装与防撞墙
-展开「**前置与伪装站高级选项**」：
-- 选择接管模式（Tunnel 或 Fallback）。
-- 设置反代目标（例如 `https://www.bing.com`），面板会自动安全审计，若目标套用了 Cloudflare CDN 将自动阻止保存以保护服务器。
+首次建议只创建一条简单链路。需要 TLS 的组合应先具备匹配证书；REALITY 等组合有不同参数要求，不能把任意域名填到所有字段里。详见[创建节点](/docs/nodes/create)。
 
-### 步骤 12：交付与订阅下发
-节点就绪后，进入「节点管理」生成订阅链接，支持直接导入 Clash / Mihomo / Sing-box / Shadowrocket 等客户端。
+## 6. 分配授权，再导入客户端
+
+创建测试用户，选择套餐授权或自定义服务授权，分配所需服务器/固定节点及有效期。使用该用户登录，检查是否可开通和取得属于自己的订阅或分享链接。
+
+在客户端导入后实际访问一个测试站点，观察连接、延迟和流量变化。客户端显示“导入成功”不能替代连通性验证。
+
+::: tip 最小验收
+管理员可登录、Agent 在线、核心接受入站、端口可达、用户有授权、客户端有实际流量，这六项都成立，才算完成第一条节点。
+:::
+
+## 后续按需求扩展
+
+| 你的需求 | 下一篇 |
+| --- | --- |
+| 节点 IP 会变化 | [动态 IP 与域名](/docs/nodes/domains) |
+| 使用另一台机器作为入口 | [任意门转发](/docs/nodes/forwarding) |
+| 让域名自动跟随 IP | [DDNS](/docs/features/ddns) |
+| 给更多用户分配服务 | [用户与服务授权](/docs/users/authorization) |
+| 准备正式运行 | [备份恢复](/docs/operations/backup)、[更新与回滚](/docs/operations/update) |
