@@ -7,7 +7,11 @@ export default defineConfig({
   lang: 'zh-CN',
   cleanUrls: true,
   lastUpdated: false,
-  head: [['meta', { name: 'theme-color', content: '#6e5cb1' }]],
+  head: [
+    ['meta', { name: 'theme-color', content: '#6e5cb1' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/brand.png?v=20261121' }],
+    ['link', { rel: 'apple-touch-icon', href: '/brand.png?v=20261121' }]
+  ],
   themeConfig: {
     logo: '/brand.png',
     siteTitle: 'RelayDock 文档',
@@ -239,3 +243,4 @@ export default defineConfig({
   },
   markdown: { image: { lazyLoading: true } }
 })
+
