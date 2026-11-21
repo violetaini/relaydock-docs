@@ -5,8 +5,9 @@ hero:
   text: 从部署到运维
   tagline: 部署、服务器接入、节点与转发、用户订阅，以及遇到问题时的排查方法。
   image:
-    src: /images/docs-cover.svg
-    alt: 控制端、节点、用户与运维的文档导航图
+    light: /images/docs-hero-light.svg
+    dark: /images/docs-hero-dark.svg
+    alt: RelayDock 中继核心与服务器节点互联插画
   actions:
     - theme: brand
       text: 开始部署
